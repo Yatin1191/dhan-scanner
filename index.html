@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NSE Stock Scanner — Dhan</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:Arial,sans-serif; background:#0a0e1a; color:#e2e8f0; min-height:100vh; }
+
+/* HEADER */
+.header { background:#0f1729; border-bottom:1px solid #1e2d4a; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:sticky; top:0; z-index:100; }
+.logo { font-size:18px; font-weight:bold; color:#00e5ff; }
+.logo span { font-size:11px; color:#64748b; display:block; margin-top:2px; }
+.header-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.status-pill { display:flex; align-items:center; gap:6px; background:rgba(0,230,118,0.08); border:1px solid rgba(0,230,118,0.2); padding:5px 12px; border-radius:20px; font-size:12px; color:#00e676; }
+.dot { width:7px; height:7px; border-radius:50%; background:#888; }
+.dot.live { background:#00e676; animation:pulse 1.5s infinite; }
+.dot.warn { background:#ffd600; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+.countdown { font-size:12px; color:#64748b; }
+.countdown span { color:#00e5ff; font-weight:bold; }
+
+/* MARKET STATUS */
+.mkt-bar { background:#0f1729; border-bottom:1px solid #1e2d4a; padding:6px 20px; font-size:12px; display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+.mkt-open { color:#00e676; font-weight:bold; }
+.mkt-closed { color:#ff3d5a; font-weight:bold; }
+
+/* CONTROLS */
+.controls { background:#0f1729; padding:12px 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border-bottom:1px solid #1e2d4a; }
+.tf-group { display:flex; gap:4px; background:#0a0e1a; padding:3px; border-radius:8px; border:1px solid #1e2d4a; }
+.tf-btn { padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#64748b; font-size:13px; font-weight:bold; cursor:pointer; transition:all 0.2s; }
+.tf-btn.active { background:#1e40af; color:#fff; }
+.scan-btn { padding:7px 18px; background:#00e5ff; border:none; border-radius:8px; color:#000; font-weight:bold; font-size:13px; cursor:pointer; transition:all 0.2s; }
+.scan-btn:hover { background:#00b8d4; }
+.scan-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.load-btn { padding:7px 18px; background:#7c3aed; border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:13px; cursor:pointer; }
+.load-btn:hover { background:#6d28d9; }
+.filter-tags { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; }
+.tag1 { background:rgba(255,109,0,0.1); border:1px solid rgba(255,109,0,0.3); color:#ff6d00; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; }
+.tag2 { background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.3); color:#a78bfa; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; }
+
+/* CACHE STATUS */
+.cache-bar { padding:8px 20px; font-size:12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #1e2d4a; }
+.cache-ok { background:rgba(0,230,118,0.06); }
+.cache-loading { background:rgba(255,214,0,0.06); }
+.cache-empty { background:rgba(255,61,90,0.06); }
+.progress-outer { flex:1; max-width:200px; height:6px; background:#1e2d4a; border-radius:3px; overflow:hidden; }
+.progress-inner { height:100%; background:linear-gradient(90deg,#7c3aed,#00e5ff); border-radius:3px; transition:width 0.5s; }
+
+/* STATS */
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:1px; background:#1e2d4a; border-bottom:1px solid #1e2d4a; }
+.stat { background:#0f1729; padding:12px 16px; text-align:center; }
+.stat-val { font-size:22px; font-weight:bold; color:#00e5ff; }
+.stat-label { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+
+/* ERROR */
+.error-box { margin:12px 20px; padding:10px 14px; background:rgba(255,61,90,0.08); border:1px solid rgba(255,61,90,0.2); border-radius:8px; color:#ff3d5a; font-size:13px; display:none; }
+
+/* TABLES */
+.table-wrap { padding:16px 20px; }
+.section-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; margin-top:20px; }
+.section-title1 { font-size:13px; font-weight:bold; color:#ff6d00; padding:6px 14px; background:rgba(255,109,0,0.08); border-radius:6px; border-left:3px solid #ff6d00; }
+.section-title2 { font-size:13px; font-weight:bold; color:#a78bfa; padding:6px 14px; background:rgba(124,58,237,0.08); border-radius:6px; border-left:3px solid #a78bfa; }
+.signal-count { font-size:11px; color:#64748b; background:#0f1729; padding:3px 8px; border-radius:10px; }
+.table-scroll { overflow-x:auto; margin-bottom:10px; }
+table { width:100%; border-collapse:collapse; min-width:650px; }
+thead th { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#64748b; padding:8px 12px; text-align:left; background:#0f1729; border-bottom:1px solid #1e2d4a; white-space:nowrap; }
+tbody tr { border-bottom:1px solid #1a2540; transition:background 0.15s; }
+tbody tr:hover { background:#162040; }
+tbody td { padding:10px 12px; font-size:13px; white-space:nowrap; }
+.coin-name { font-weight:bold; font-size:14px; color:#e2e8f0; }
+.coin-sub { font-size:10px; color:#64748b; margin-top:1px; }
+.price { font-family:monospace; }
+.change-up { color:#00e676; font-weight:bold; }
+.rvol-fire { background:rgba(255,61,90,0.15); border:1px solid rgba(255,61,90,0.3); color:#ff3d5a; padding:2px 8px; border-radius:5px; font-size:12px; font-weight:bold; }
+.rvol-hot { background:rgba(255,109,0,0.15); border:1px solid rgba(255,109,0,0.3); color:#ff6d00; padding:2px 8px; border-radius:5px; font-size:12px; font-weight:bold; }
+.rvol-warm { background:rgba(255,214,0,0.1); border:1px solid rgba(255,214,0,0.25); color:#ffd600; padding:2px 8px; border-radius:5px; font-size:12px; font-weight:bold; }
+.rvol-ok { background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.25); color:#00e676; padding:2px 8px; border-radius:5px; font-size:12px; font-weight:bold; }
+.turnover { font-family:monospace; color:#e2e8f0; }
+.empty { text-align:center; padding:30px 20px; color:#64748b; font-size:13px; }
+.footer { text-align:center; padding:16px; font-size:11px; color:#64748b; border-top:1px solid #1e2d4a; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    NSE Stock Scanner
+    <span>Nifty 500 + Midcap + Smallcap + Microcap Universe</span>
+  </div>
+  <div class="header-right">
+    <div class="countdown">Next scan: <span id="cd">60</span>s</div>
+    <div class="status-pill"><div class="dot" id="dot"></div><span id="stTxt">Starting</span></div>
+  </div>
+</div>
+
+<!-- MARKET STATUS -->
+<div class="mkt-bar">
+  <span id="mktStatus">⏳ Checking market...</span>
+  <span style="color:#64748b;">NSE Hours: Mon–Fri &nbsp;9:15 AM – 3:30 PM IST</span>
+  <span style="color:#64748b;" id="istTime"></span>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <div class="tf-group">
+    <button class="tf-btn active" onclick="setTF('1m')" id="b1m">1m</button>
+    <button class="tf-btn" onclick="setTF('5m')" id="b5m">5m</button>
+    <button class="tf-btn" onclick="setTF('15m')" id="b15m">15m</button>
+  </div>
+  <button class="load-btn" onclick="loadCache()" id="loadBtn">⚡ Load 50D Avg</button>
+  <button class="scan-btn" onclick="runScan()" id="scanBtn">🔍 Scan Now</button>
+  <div class="filter-tags">
+    <span class="tag1">🔥 C1: Turnover ≥ ₹8Cr + RVOL ≥ 10x</span>
+    <span class="tag2">⚡ C2: Turnover ≥ ₹6Cr + RVOL ≥ 20x</span>
+  </div>
+</div>
+
+<!-- CACHE STATUS BAR -->
+<div class="cache-bar cache-empty" id="cacheBar">
+  <span id="cacheTxt">⚠️ 50-Day average not loaded — click "Load 50D Avg" button first!</span>
+  <div class="progress-outer" id="progressOuter" style="display:none">
+    <div class="progress-inner" id="progressInner" style="width:0%"></div>
+  </div>
+  <span id="progressTxt" style="color:#ffd600; display:none;"></span>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="stat-val" id="sTotal">—</div><div class="stat-label">Stocks Scanned</div></div>
+  <div class="stat"><div class="stat-val" id="sC1" style="color:#ff6d00">—</div><div class="stat-label">Criteria 1 Signals</div></div>
+  <div class="stat"><div class="stat-val" id="sC2" style="color:#a78bfa">—</div><div class="stat-label">Criteria 2 Signals</div></div>
+  <div class="stat"><div class="stat-val" id="sRvol" style="color:#ffd600">—</div><div class="stat-label">Top RVOL</div></div>
+  <div class="stat"><div class="stat-val" id="sTime" style="font-size:14px">—</div><div class="stat-label">Last Scan</div></div>
+</div>
+
+<!-- ERROR BOX -->
+<div class="error-box" id="errBox"></div>
+
+<!-- TABLES -->
+<div class="table-wrap">
+
+  <div class="section-header">
+    <div class="section-title1">🔥 Criteria 1 — Turnover ≥ ₹8 Crore + RVOL ≥ 10x + Price UP</div>
+    <span class="signal-count" id="c1Count">0 signals</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Stock</th>
+          <th>Price (₹)</th>
+          <th>Change %</th>
+          <th>RVOL vs 50D</th>
+          <th>Turnover</th>
+          <th>Today Vol</th>
+          <th>50D Avg Vol</th>
+        </tr>
+      </thead>
+      <tbody id="tBody1">
+        <tr><td colspan="8"><div class="empty">⏳ Load 50D average first, then click Scan Now</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title2">⚡ Criteria 2 — Turnover ≥ ₹6 Crore + RVOL ≥ 20x + Price UP</div>
+    <span class="signal-count" id="c2Count">0 signals</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Stock</th>
+          <th>Price (₹)</th>
+          <th>Change %</th>
+          <th>RVOL vs 50D</th>
+          <th>Turnover</th>
+          <th>Today Vol</th>
+          <th>50D Avg Vol</th>
+        </tr>
+      </thead>
+      <tbody id="tBody2">
+        <tr><td colspan="8"><div class="empty">⏳ Load 50D average first, then click Scan Now</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  NSE Stock Scanner &nbsp;|&nbsp; Data from NSE India + Yahoo Finance &nbsp;|&nbsp; For educational purposes only &nbsp;|&nbsp; Not financial advice
+</div>
+
+<script>
+const BACKEND = 'https://dhan-scanner-backend.onrender.com';
+const SCAN_SEC = 60;
+let tf = '1m', scanning = false, cdVal = SCAN_SEC, timer = null;
+let cacheReady = false, cacheChecking = false;
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ── IST CLOCK ────────────────────────────────────────────────────────────────
+function updateClock(){
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  document.getElementById('istTime').textContent =
+    'IST: ' + ist.toLocaleTimeString('en-IN');
+
+  const h = ist.getHours(), m = ist.getMinutes();
+  const day = ist.getDay();
+  const isWeekday = day>=1 && day<=5;
+  const isMarketOpen = isWeekday && (h>9||(h===9&&m>=15)) && (h<15||(h===15&&m<=30));
+
+  document.getElementById('mktStatus').innerHTML = isMarketOpen
+    ? '<span class="mkt-open">🟢 Market OPEN</span>'
+    : '<span class="mkt-closed">🔴 Market CLOSED</span> — Scanner still works for testing';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── TIMEFRAME ────────────────────────────────────────────────────────────────
+function setTF(t){
+  tf = t;
+  ['1m','5m','15m'].forEach(x=>{
+    document.getElementById('b'+x).classList.toggle('active', x===t);
+  });
+}
+
+// ── LOAD CACHE ───────────────────────────────────────────────────────────────
+async function loadCache(){
+  const btn = document.getElementById('loadBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading...';
+  setCacheBar('loading','⏳ Loading 50-day average volume from Yahoo Finance...');
+  document.getElementById('progressOuter').style.display = 'block';
+  document.getElementById('progressTxt').style.display = 'inline';
+  hideErr();
+
+  try {
+    await fetch(`${BACKEND}/api/loadcache`);
+    // Poll progress
+    let done = false;
+    while(!done){
+      await sleep(3000);
+      try {
+        const r = await fetch(`${BACKEND}/api/progress`);
+        const p = await r.json();
+        const pct = p.percent || 0;
+        document.getElementById('progressInner').style.width = pct+'%';
+        document.getElementById('progressTxt').textContent = `${p.loaded}/${p.total} stocks (${pct}%)`;
+        document.getElementById('cacheTxt').textContent = `⏳ Loading 50D average... ${p.loaded}/${p.total} stocks done`;
+        if(p.done || pct >= 95){
+          done = true;
+          cacheReady = true;
+          setCacheBar('ok',`✅ 50D Average loaded for ${p.loaded} stocks! Ready to scan.`);
+          document.getElementById('progressOuter').style.display = 'none';
+          document.getElementById('progressTxt').style.display = 'none';
+          showToast('✅ Cache ready! Click Scan Now to start.');
+        }
+      } catch(e){ /* keep polling */ }
+    }
+  } catch(e){
+    setCacheBar('empty','❌ Cache load failed — check backend and try again.');
+    showErr('Failed to load cache: '+e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Load 50D Avg';
+}
+
+// ── AUTO TIMER ───────────────────────────────────────────────────────────────
+function startTimer(){
+  clearInterval(timer);
+  cdVal = SCAN_SEC;
+  timer = setInterval(()=>{
+    cdVal--;
+    document.getElementById('cd').textContent = cdVal;
+    if(cdVal<=0){ cdVal=SCAN_SEC; if(cacheReady) runScan(); }
+  },1000);
+}
+
+// ── RUN SCAN ─────────────────────────────────────────────────────────────────
+async function runScan(){
+  if(scanning) return;
+  if(!cacheReady){
+    showErr('Please click "Load 50D Avg" button first before scanning!');
+    return;
+  }
+  scanning = true;
+  document.getElementById('scanBtn').disabled = true;
+  setStatus('Scanning...','#ffd600',false);
+  hideErr();
+  showLoading();
+
+  try {
+    const r = await fetch(`${BACKEND}/api/scan`);
+    const data = await r.json();
+
+    if(data.error){
+      showErr(data.error);
+      showEmptyBoth('Scan failed — '+data.error);
+    } else {
+      renderTable(data.signals1 || [], 'tBody1', 'c1Count', 'c1');
+      renderTable(data.signals2 || [], 'tBody2', 'c2Count', 'c2');
+      updateStats(data);
+    }
+  } catch(e){
+    showErr('Scan failed: '+e.message);
+    showEmptyBoth('Could not connect to backend. Try again.');
+  }
+
+  scanning = false;
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('sTime').textContent = new Date().toLocaleTimeString('en-IN');
+  setStatus('Live','#00e676',true);
+  startTimer();
+}
+
+// ── RENDER TABLE ─────────────────────────────────────────────────────────────
+function renderTable(data, bodyId, countId, type){
+  document.getElementById(countId).textContent = data.length+' signal'+(data.length!==1?'s':'');
+  const body = document.getElementById(bodyId);
+
+  if(!data.length){
+    body.innerHTML = `<tr><td colspan="8"><div class="empty">
+      📭 No signals right now — market may be calm or criteria too strict
+    </div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = data.map((r,i)=>{
+    const rClass = r.rvol>=50?'rvol-fire':r.rvol>=30?'rvol-hot':r.rvol>=20?'rvol-warm':'rvol-ok';
+    return `<tr>
+      <td style="color:#64748b;font-size:12px;">${i+1}</td>
+      <td>
+        <div class="coin-name">${r.symbol}</div>
+        <div class="coin-sub">NSE EQUITY</div>
+      </td>
+      <td class="price">₹${r.price.toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+      <td class="change-up">▲ ${r.change.toFixed(2)}%</td>
+      <td><span class="${rClass}">${r.rvol.toFixed(1)}x</span></td>
+      <td class="turnover">₹${r.turnoverCr.toFixed(2)} Cr</td>
+      <td style="font-family:monospace;">${fmtL(r.volume)}</td>
+      <td style="font-family:monospace;color:#64748b;">${fmtL(r.avgVolume)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── STATS ─────────────────────────────────────────────────────────────────────
+function updateStats(data){
+  document.getElementById('sTotal').textContent = data.scanned || 0;
+  document.getElementById('sC1').textContent = (data.signals1||[]).length;
+  document.getElementById('sC2').textContent = (data.signals2||[]).length;
+  const allSignals = [...(data.signals1||[]),...(data.signals2||[])];
+  const topRvol = allSignals.length ? Math.max(...allSignals.map(s=>s.rvol)) : 0;
+  document.getElementById('sRvol').textContent = topRvol ? topRvol.toFixed(1)+'x' : '—';
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function fmtL(n){
+  if(!n) return '—';
+  if(n>=1e7) return (n/1e7).toFixed(2)+'Cr';
+  if(n>=1e5) return (n/1e5).toFixed(2)+'L';
+  if(n>=1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toString();
+}
+
+function setStatus(t,c,live){
+  document.getElementById('stTxt').textContent=t;
+  const d=document.getElementById('dot');
+  d.style.background=c;
+  d.className='dot'+(live?' live':' warn');
+}
+
+function setCacheBar(type, msg){
+  const bar = document.getElementById('cacheBar');
+  bar.className = 'cache-bar cache-'+type;
+  document.getElementById('cacheTxt').textContent = msg;
+}
+
+function showLoading(){
+  ['tBody1','tBody2'].forEach(id=>{
+    document.getElementById(id).innerHTML =
+      `<tr><td colspan="8"><div class="empty">⏳ Scanning stocks...</div></td></tr>`;
+  });
+}
+
+function showEmptyBoth(msg){
+  ['tBody1','tBody2'].forEach(id=>{
+    document.getElementById(id).innerHTML =
+      `<tr><td colspan="8"><div class="empty">📭 ${msg}</div></td></tr>`;
+  });
+}
+
+function showErr(m){
+  const b=document.getElementById('errBox');
+  b.textContent='⚠️ '+m;
+  b.style.display='block';
+}
+
+function hideErr(){ document.getElementById('errBox').style.display='none'; }
+
+// Simple toast
+function showToast(msg){
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#162040;border:1px solid #1e2d4a;border-left:3px solid #00e5ff;padding:12px 18px;border-radius:8px;font-size:13px;color:#e2e8f0;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 4000);
+}
+
+// Start timer on load
+startTimer();
+</script>
+</body>
+</html>
